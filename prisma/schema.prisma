@@ -1,0 +1,137 @@
+// Iqrar Chiller Van Transport LLC — Admin CRM schema
+// Swap provider to "postgresql" + set DATABASE_URL for production (matches
+// the Postgres stack already used on Byteflow's other projects).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // change to "postgresql" for production
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Auth ----------
+
+enum AdminRole {
+  OWNER
+  EDITOR
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         AdminRole @default(EDITOR)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ---------- Site-wide settings (singleton row, id always "main") ----------
+
+model SiteSettings {
+  id          String   @id @default("main")
+  siteName    String   @default("Iqrar Chiller Van Transport LLC")
+  logoUrl     String?
+  phone       String   @default("")
+  whatsapp    String   @default("")
+  email       String   @default("")
+  address     String   @default("")
+  facebookUrl String?
+  instagramUrl String?
+  linkedinUrl String?
+  heroHeadline String  @default("Reliable Chiller Van Transport in the UAE")
+  heroSubtext  String  @default("")
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------- Fleet / Services ----------
+
+model VehicleType {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  models      String   // e.g. "Toyota Hiace, Nissan Urvan"
+  tempMin     Int?     // e.g. -18
+  tempMax     Int?     // e.g. 5
+  icon        String   @default("🚚")
+  description String
+  idealFor    String   @default("") // comma-separated tags
+  imageUrl    String?
+  order       Int      @default(0)
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  leads       Lead[]
+}
+
+// ---------- Blog ----------
+
+model BlogCategory {
+  id    String @id @default(cuid())
+  name  String
+  slug  String @unique
+  posts BlogPost[]
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model BlogPost {
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  excerpt     String
+  body        String     // rich text / markdown
+  coverImage  String?
+  authorName  String     @default("Iqrar Chiller Van Transport")
+  status      PostStatus @default(DRAFT)
+  categoryId  String?
+  category    BlogCategory? @relation(fields: [categoryId], references: [id])
+  publishedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+// ---------- Team ----------
+
+model TeamMember {
+  id       String  @id @default(cuid())
+  name     String
+  role     String
+  photoUrl String?
+  order    Int     @default(0)
+}
+
+// ---------- Leads / Inquiries (from contact form + "Book a Van") ----------
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+model Lead {
+  id            String       @id @default(cuid())
+  name          String
+  phone         String
+  email         String?
+  message       String?
+  vehicleTypeId String?
+  vehicleType   VehicleType? @relation(fields: [vehicleTypeId], references: [id])
+  status        LeadStatus   @default(NEW)
+  createdAt     DateTime     @default(now())
+}
+
+// ---------- Media library ----------
+
+model Media {
+  id        String   @id @default(cuid())
+  url       String
+  altText   String   @default("")
+  filename  String
+  createdAt DateTime @default(now())
+}
