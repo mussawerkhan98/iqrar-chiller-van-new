@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite" // change to "postgresql" for production
+  provider = "mysql" // Hostinger's managed Node.js hosting supports MySQL
   url      = env("DATABASE_URL")
 }
 
@@ -42,7 +42,7 @@ model SiteSettings {
   instagramUrl String?
   linkedinUrl String?
   heroHeadline String  @default("Reliable Chiller Van Transport in the UAE")
-  heroSubtext  String  @default("")
+  heroSubtext  String  @default("") @db.Text
   updatedAt   DateTime @updatedAt
 }
 
@@ -56,8 +56,8 @@ model VehicleType {
   tempMin     Int?     // e.g. -18
   tempMax     Int?     // e.g. 5
   icon        String   @default("🚚")
-  description String
-  idealFor    String   @default("") // comma-separated tags
+  description String   @db.Text
+  idealFor    String   @default("") @db.Text // comma-separated tags
   imageUrl    String?
   order       Int      @default(0)
   published   Boolean  @default(true)
@@ -84,8 +84,8 @@ model BlogPost {
   id          String     @id @default(cuid())
   title       String
   slug        String     @unique
-  excerpt     String
-  body        String     // rich text / markdown
+  excerpt     String     @db.Text
+  body        String     @db.Text // rich text / markdown
   coverImage  String?
   authorName  String     @default("Iqrar Chiller Van Transport")
   status      PostStatus @default(DRAFT)
@@ -119,7 +119,7 @@ model Lead {
   name          String
   phone         String
   email         String?
-  message       String?
+  message       String?      @db.Text
   vehicleTypeId String?
   vehicleType   VehicleType? @relation(fields: [vehicleTypeId], references: [id])
   status        LeadStatus   @default(NEW)

@@ -22,10 +22,14 @@ cp .env.example .env
 ```
 
 Edit `.env`:
-- `DATABASE_URL` — SQLite works out of the box for local dev. For
-  production, switch `provider = "sqlite"` to `provider = "postgresql"` in
-  `prisma/schema.prisma` and point `DATABASE_URL` at your Postgres instance.
+- `DATABASE_URL` — for local development, point this at any MySQL instance
+  (a local install, Docker's `mysql:8` image, or even Hostinger's MySQL
+  database directly if you don't mind developing against production data
+  structure). Format: `mysql://user:password@host:3306/dbname`.
 - `SESSION_SECRET` — generate with `openssl rand -base64 32`.
+- `S3_*` — upload storage. Cloudflare R2 is the simplest free option (10GB
+  free); AWS S3 also works since you already use AWS elsewhere. See the
+  comments in `.env.example` for both.
 
 ## 2. Set up the database
 
@@ -93,14 +97,65 @@ Prisma model + CRUD page, happy to add it.
   in `react-markdown` in `src/app/(site)/blog/[slug]/page.tsx` if you want
   full Markdown support later.
 
-## Moving to production
+## Deploying to Hostinger (Managed Node.js Hosting, no VPS)
 
-- **Database**: switch to Postgres (see above) and run
-  `npx prisma migrate deploy` on deploy.
-- **File uploads**: `src/lib/uploads.ts` writes to `public/uploads/` on
-  local disk — fine for a single VPS behind Nginx. To move to S3 later,
-  only `saveUploadedFile()` needs to change.
-- **CI/CD**: fits your existing GitHub Actions + PM2 + Nginx pipeline —
-  `npm run build && npm run start`, with `npx prisma migrate deploy` as a
-  pre-deploy step.
+This project is configured to run on Hostinger's **Managed Node.js Web Apps
+Hosting** — available on a Business web hosting plan or any Cloud plan.
+No SSH/server management needed.
+
+1. **Push this project to a GitHub repo** (private is fine).
+2. **Create the database**: hPanel → Databases → MySQL Databases → create
+   a database + user. Copy the connection details.
+3. **Create the storage bucket**: sign up for Cloudflare R2 (free tier is
+   plenty for logo/fleet/blog images), create a bucket, generate an API
+   token, and enable public access (or bind a custom domain) for the
+   bucket so uploaded images have public URLs.
+4. **In hPanel**: Websites → Add Website → Deploy Web App → Import Git
+   Repository → select this repo. Hostinger auto-detects Next.js.
+5. **Add environment variables** in the app's Environment Variables tab:
+   `DATABASE_URL` (mysql://... from step 2), `SESSION_SECRET`, and the five
+   `S3_*` variables (from step 3).
+6. **Deploy.** `npm install` triggers `prisma generate` automatically
+   (via the `postinstall` script) — no database connection needed for
+   this step, so it always succeeds even if the build container can't
+   reach MySQL. Then `npm run build` runs `next build`. Migrations run
+   separately, at startup (see below).
+7. **Migrations run on startup**, not at build time: `npm start` runs
+   `prisma migrate deploy && next start`. This matters because build
+   containers often can't reach your database, but the running app
+   container can — so migrations need to happen right before the server
+   actually starts, not during the build step.
+8. **Run the seed once**, either by temporarily adding a script that calls
+   it on first deploy, or by connecting to the MySQL database directly
+   (hPanel → phpMyAdmin) and inserting your first admin user by hand
+   (email + bcrypt password hash + role).
+9. **Connect your domain** to the Node.js app in hPanel.
+
+### If the build fails with TypeScript "implicit any" errors
+
+If you see errors like `Parameter 'x' implicitly has an 'any' type` at
+Prisma query call sites during build, it means `prisma generate` didn't
+run (or failed) before `next build` — an ungenerated Prisma Client falls
+back to loose types, and `next build` fails hard on TypeScript errors.
+Check the build log for the `postinstall` step specifically; if
+`prisma generate` errored there (rather than just not running), that's
+the actual thing to fix — the "implicit any" errors are a downstream
+symptom, not the root cause.
+
+### Why not SQLite or local-disk uploads here
+
+Managed Node.js hosting runs your app in a rebuilt environment on every
+deploy — anything written to the local filesystem at runtime (a SQLite
+file, or images saved to `public/uploads/`) isn't guaranteed to survive
+the next deploy. That's why this project uses MySQL (Hostinger's managed
+database) and R2/S3 (external object storage) instead — both survive
+redeploys and scale independently of the app container.
+
+### If you'd rather use a VPS instead
+
+Everything above still applies except step 3–4 — on a VPS you'd `git pull`
+and run `npm run build && pm2 restart` yourself instead of connecting
+GitHub through hPanel. SQLite would technically survive redeploys on a VPS
+(you control the filesystem), but MySQL/Postgres is still recommended for
+anything beyond a single low-traffic site.
 
